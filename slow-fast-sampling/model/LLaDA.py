@@ -60,6 +60,8 @@ from dllm_cache import  FeatureCacheConfig,FeatureCache,register_cache_LLADA,reg
 from torch.distributed.device_mesh import init_device_mesh
 from dataclasses import asdict
 from sampling_utils import set_seed
+from slow_fast_sampling import SlowFastSampler
+
 T = TypeVar("T", bound="LM")
 @register_model("LLADA")
 class LLaDA(TemplateLM):
@@ -940,8 +942,6 @@ class LLaDA(TemplateLM):
         ds = Dataset.from_list(ds)
         gen_kwargs = requests[0].args[1]
         max_prompt_len = -1
-        total_model_calls = 0
-        total_model_gen_length = 0
         total_iter = 0
         
         for batch in ds.iter(self.batch_size):
@@ -967,21 +967,23 @@ class LLaDA(TemplateLM):
             #     cfg_scale=gen_kwargs.get("cfg_scale"),
             # )
             
-            out, model_calls, avg_model_gen_length = generate_slow_fast_sampling(
-                input_ids=context_enc,
-                attention_mask=attn_masks,
-                model=self.model,
-                gen_length=min(gen_kwargs.get("gen_length"),gen_kwargs.get("max_gen_toks",1024)),
-                block_length=gen_kwargs.get("block_length"),
-                cfg_scale=gen_kwargs.get("cfg_scale"),
-                k_exploration_steps=gen_kwargs.get("k_exploration_steps",6),
-                cycle_len_confidence_threshold = gen_kwargs.get("cycle_len_confidence_threshold",0.3),
-                high_confidence_threshold = gen_kwargs.get("high_confidence_threshold",0.9),
-                cycle_length_stability_window = gen_kwargs.get("cycle_length_stability_window",2),
-                cycle_length_stability_std_dev_threshold = gen_kwargs.get("cycle_length_stability_std_dev_threshold",1.0),
-            )
-            total_model_calls += model_calls
-            total_model_gen_length += avg_model_gen_length
+            # out, model_calls, avg_model_gen_length = generate_slow_fast_sampling(
+            #     input_ids=context_enc,
+            #     attention_mask=attn_masks,
+            #     model=self.model,
+            #     gen_length=min(gen_kwargs.get("gen_length"),gen_kwargs.get("max_gen_toks",1024)),
+            #     block_length=gen_kwargs.get("block_length"),
+            #     cfg_scale=gen_kwargs.get("cfg_scale"),
+            #     k_exploration_steps=gen_kwargs.get("k_exploration_steps",6),
+            #     cycle_len_confidence_threshold = gen_kwargs.get("cycle_len_confidence_threshold",0.3),
+            #     high_confidence_threshold = gen_kwargs.get("high_confidence_threshold",0.9),
+            #     cycle_length_stability_window = gen_kwargs.get("cycle_length_stability_window",2),
+            #     cycle_length_stability_std_dev_threshold = gen_kwargs.get("cycle_length_stability_std_dev_threshold",1.0),
+            # )
+
+            sampler=SlowFastSampler(model=self.model,gen_kwargs=gen_kwargs)
+            out=sampler.generate(context_enc,attn_masks)
+
             
             cont_toks_list = self.tokenizer.batch_decode(out, skip_special_tokens=True)
             for s in cont_toks_list:
