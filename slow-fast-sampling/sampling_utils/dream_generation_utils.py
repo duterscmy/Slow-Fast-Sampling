@@ -550,7 +550,6 @@ class DreamGenerationMixin:
         plot_save_dir = 'confidence_dream_map'
         total_model_calls_length = 0
 
-        # 从 generation_config 获取参数
         output_history = generation_config.output_history
         return_dict_in_generate = generation_config.return_dict_in_generate
         max_length = generation_config.max_length
@@ -562,21 +561,14 @@ class DreamGenerationMixin:
         top_p = generation_config.top_p
         top_k = generation_config.top_k
 
-        # 大循环的次数 (新超参数)
-        MAX_MAJOR_CYCLES = getattr(generation_config, "max_major_cycles", 5)
-
-        # 阶段0 (周期发现) 的参数
-        N_CYCLE_DISCOVERY_STEPS = getattr(generation_config, "n_cycle_discovery_steps", 6) # 每个大循环内，发现阶段的步数
+        N_CYCLE_DISCOVERY_STEPS = getattr(generation_config, "n_cycle_discovery_steps", 6) 
         CONF_THRESHOLD_CYCLE_LEN_PRED = getattr(generation_config, "conf_threshold_cycle_len_pred", 0.1)
-        STABILIZE_COUNT = getattr(generation_config, "stabilize_count", 2) # 建议 >=2
-        MIN_CYCLE_LEN_FOR_STAB = getattr(generation_config, "min_cycle_len_for_stab", 3)
+        STABILIZE_COUNT = getattr(generation_config, "stabilize_count", 2)
         CYCLE_LEN_VARIANCE_THRESHOLD = getattr(generation_config, "cycle_len_variance_threshold", 1.0)
         HIGH_CONF_FOR_PARALLEL_DECODE_DISCOVERY = getattr(generation_config, "high_conf_for_parallel_decode_discovery", 0.8)
         MIN_TOKENS_FOR_PARALLEL_DECODE_DISCOVERY = getattr(generation_config, "min_tokens_for_parallel_decode_discovery", 2)
 
-        # 阶段1 (周期解码) 的参数
-        # MAX_STEPS_PER_CYCLE_DECODE = getattr(generation_config, "max_steps_per_cycle_decode", 10) # 每个大循环内，阶段1的最大步数
-        HIGH_CONF_FOR_CYCLE_DECODE = getattr(generation_config, "high_conf_for_cycle_decode", 0.9)
+        HIGH_CONF_FOR_CYCLE_DECODE = getattr(generation_config, "high_conf_for_cycle_decode", 0.85)
         MIN_DECODE_IN_CYCLE_FALLBACK = getattr(generation_config, "min_decode_in_cycle_fallback", 2)
         
         histories = [] if (return_dict_in_generate and output_history) else None
@@ -601,12 +593,11 @@ class DreamGenerationMixin:
 
         x = generation_tokens_hook_func(None, x, None) # Initial hook
 
-        # --- 状态变量 ---
-        stable_cycle_length_batch = torch.full((batch_size, max_length), 0, device=device, dtype=torch.long) # 初始化一个默认值
+        stable_cycle_length_batch = torch.full((batch_size, max_length), 0, device=device, dtype=torch.long) 
         is_cycle_len_determined_batch = torch.zeros(batch_size, device=device, dtype=torch.bool) # Reset for each major cycle's phase 0
         potential_cycle_lengths_history_tensor = torch.zeros((STABILIZE_COUNT, batch_size), device=device, dtype=torch.long)
         
-        global_model_calls = 0 # Tracks total calls to the model (like global_iter_step before)
+        global_model_calls = 0 
 
         # ============================================================
         #  OUTER MAJOR LOOP
@@ -623,7 +614,6 @@ class DreamGenerationMixin:
             # ============================================================
             #  PHASE 0: CYCLE DISCOVERY (within major_cycle_iter)
             # ============================================================
-            # logger.info(f"  大循环 {major_cycle_iter+1} - 进入周期发现阶段...")
             for discovery_step in range(N_CYCLE_DISCOVERY_STEPS):
                 if not (x == mask_token_id).any(): 
                     break
@@ -642,7 +632,6 @@ class DreamGenerationMixin:
                 x0 = None
 
                 for b_idx in range(batch_size):
-                    # 获取全局的prompt之后的confidence和x0
                     probs = torch.softmax(logits_p0[b_idx, prompt_length:], dim=-1)
                     confidence, x0 = probs.max(dim=-1)
 
@@ -657,33 +646,29 @@ class DreamGenerationMixin:
 
                         if len(above_thresh_indices_in_scope) > 0:
                             farthest_idx_in_scope = above_thresh_indices_in_scope.max().item()
-                            potential_len = start_cycle_idx + farthest_idx_in_scope + 1 # 增量长度,末尾idx
+                            potential_len = start_cycle_idx + farthest_idx_in_scope + 1 
                         else:
-                            potential_len = start_cycle_idx + 1 # 尝试至少扩展1 (如果后面还有空间)
+                            potential_len = start_cycle_idx + 1 
                         current_history_slot = discovery_step % STABILIZE_COUNT
                         potential_cycle_lengths_history_tensor[current_history_slot, b_idx] = potential_len
                         
                         if discovery_step >= 0:
-                            # 提取当前批次项的周期长度历史窗口
                             history_window_for_item_list = [
                                 potential_cycle_lengths_history_tensor[i, b_idx].item() for i in range(STABILIZE_COUNT)
                             ]
                             history_window_tensor = torch.tensor(history_window_for_item_list, 
                                                                 device=x.device, dtype=torch.float32)
-                            # 计算方差
-                            variance_of_lengths = torch.tensor(float('inf'), device=x.device) # 默认值，表示不稳定
-                            if STABILIZE_COUNT >= 2: # 方差对于 unbiased=True 至少需要2个点
+                            variance_of_lengths = torch.tensor(float('inf'), device=x.device) 
+                            if STABILIZE_COUNT >= 2: 
                                 variance_of_lengths = torch.var(history_window_tensor, unbiased=True)
-                            elif STABILIZE_COUNT == 1: # 如果只看一步历史，方差视为0 (最稳定)
+                            elif STABILIZE_COUNT == 1: 
                                 variance_of_lengths = torch.tensor(0.0, device=x.device)
                             is_variance_low = variance_of_lengths <= CYCLE_LEN_VARIANCE_THRESHOLD
 
                             if is_variance_low:
-                                # 方差小：将稳定周期长度设置为历史窗口中的最后一个值 (即 potential_len)
                                 stable_cycle_length_batch[b_idx, major_cycle_iter] = potential_len
                                 is_cycle_len_determined_batch[b_idx] = True
                             else:
-                                # 方差大：将稳定周期长度设置为历史窗口中长度的平均值
                                 mean_len = torch.mean(history_window_tensor)
                                 stable_cycle_length_batch[b_idx, major_cycle_iter] = torch.round(mean_len).long().clamp(min=1) # 四舍五入并确保至少为1
                                 is_cycle_len_determined_batch[b_idx] = False if discovery_step < N_CYCLE_DISCOVERY_STEPS -1 else True# 明确标记为不稳定
@@ -724,10 +709,8 @@ class DreamGenerationMixin:
             # ============================================================
             #  PHASE 1: CYCLE DECODE (within major_cycle_iter)
             # ============================================================
-            # logger.info(f"  大循环 {major_cycle_iter+1} - 进入周期解码阶段...")
 
             phase1_steps_this_major_cycle = 0
-            # Heuristic: If a few steps in phase 1 yield no decoded tokens for any active item, break this phase1.
             NO_PROGRESS_PATIENCE_P1 = 3 
             no_progress_counter_p1 = torch.zeros(batch_size, dtype=torch.int, device=device)
             cache_for_out_cycle = None
@@ -773,7 +756,6 @@ class DreamGenerationMixin:
                         no_progress_counter_p1[b_idx] = 0 # Reset patience if done
                         continue
                     
-                    # 获取全局的confidence和x0(prompt之后的)
                     probs_p1 = torch.softmax(logits_p1[b_idx, prompt_length:], dim=-1)
                     confidence_p1, x0_p1 = probs_p1.max(dim=-1)
 

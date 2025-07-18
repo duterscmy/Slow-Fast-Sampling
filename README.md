@@ -68,7 +68,7 @@ bash scripts/run_dream_bbh_base.sh
 ```
 
 ## 📮 Contact
-Created and maintained by Qingyan Wei (florawei0506@gmail.com).
+Created and maintained by Qingyan Wei (liangrun@csu.edu.cn).
 Feel free to open an issue or drop me an email—PRs are welcome!
 
 ## 🎉 Acknowledgements
