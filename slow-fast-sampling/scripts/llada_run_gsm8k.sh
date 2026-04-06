@@ -1,4 +1,4 @@
-accelerate launch --config_file eval_config.yaml evaluation_script.py -m lm_eval --model llada_dist --tasks gsm8k_cot_zeroshot --batch_size 1 \
+accelerate launch --config_file eval_config.yaml evaluation_script.py -m lm_eval --model LLADA --tasks gsm8k_cot_zeroshot --batch_size 1 \
 --model_args "pretrained=/mnt/fast/nobackup/scratch4weeks/mc03002/models/LLaDA-8B-Instruct,parallelize=False,backend="causal",mc_num=128,is_feature_cache=False,is_cfg_cache=False" \
 --gen_kwargs "block_length=32,gen_length=256,cfg_scale=0.0 "  \
 --num_fewshot 0  \

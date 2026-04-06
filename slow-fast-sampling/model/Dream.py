@@ -36,13 +36,7 @@ from lm_eval.api.instance import Instance
 from lm_eval.api.model import TemplateLM
 from lm_eval.api.registry import register_model
 from lm_eval.models.utils import (
-    Collator,
-    clear_torch_cache,
-    configure_pad_token,
     get_dtype,
-    handle_stop_sequences,
-    pad_and_concat,
-    stop_sequences_criteria,
 )
 from lm_eval.__main__ import cli_evaluate
 

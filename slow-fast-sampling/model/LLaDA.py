@@ -36,15 +36,10 @@ from lm_eval.api.instance import Instance
 from lm_eval.api.model import TemplateLM
 from lm_eval.api.registry import register_model
 from lm_eval.models.utils import (
-    Collator,
-    clear_torch_cache,
     configure_pad_token,
     get_dtype,
-    handle_stop_sequences,
-    pad_and_concat,
-    stop_sequences_criteria,
 )
-from lm_eval.__main__ import cli_evaluate
+# from lm_eval.__main__ import cli_evaluate
 
 eval_logger = logging.getLogger(__name__)
 from sampling_utils import generate_slow_fast_sampling
@@ -56,7 +51,7 @@ try:
 except ImportError:
     DEEPSPEED_AVAILABLE = False
 
-from dllm_cache import  FeatureCacheConfig,FeatureCache,register_cache_LLADA,register_cache_Dream
+from dllm_cache import  FeatureCacheConfig,FeatureCache,register_cache_LLADA
 from torch.distributed.device_mesh import init_device_mesh
 from dataclasses import asdict
 from sampling_utils import set_seed
